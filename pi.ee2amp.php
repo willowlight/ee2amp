@@ -42,22 +42,6 @@ class ee2amp {
 
 		$dom = new Dom;
 		$dom->load(ee()->TMPL->tagdata);
-		
-		// Remove scripts
-
-		$scripts = $dom->find('script');
-		foreach ($scripts as $script)
-		{
-			$script->delete();
-		}
-		
-		// Replace objects
-
-		$objects = $dom->find('object'); 
-		foreach ($objects as $object)
-		{
-			$object->delete();
-		}
 
 		// Replace images
 
