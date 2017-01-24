@@ -34,24 +34,34 @@ class ee2amp {
 
 	function parse() 
 	{
-		$data = ee()->TMPL->tagdata;
+
+		$vars = array();
+
+		$data = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'content');
+
+		$min_width = ee()->TMPL->fetch_param('min_width') ?: 480;
 
 		$cond['vimeo'] = 'no';
 		$cond['soundcloud'] = 'no';
 		$cond['youtube'] = 'no';
 
 		$dom = new Dom;
-		$dom->load(ee()->TMPL->tagdata);
 
+		$dom->load($data);
+
+		// Replaces multiple whitespaces in image tags if present
+
+		$data = preg_replace_callback('/<img.*?\/?>/', function ($matches) { return preg_replace('!\s+!', ' ', $matches[0]) ; }, $data);
+		
 		// Replace images
 
 		$images = $dom->find('img');
 		foreach ($images as $img)
 		{
-			$img_width = ($img->getAttribute('width')) ? $img->getAttribute('width') : NULL;
-			$img_height = ($img->getAttribute('height')) ? $img->getAttribute('height') : NULL;
-			$img_alt = ($img->getAttribute('alt')) ? $img->getAttribute('alt') : NULL;
-			$img_src = ($img->getAttribute('src')) ? $img->getAttribute('src') : NULL;
+			$img_width = $img->getAttribute('width') ?: NULL;
+			$img_height = $img->getAttribute('height') ?: NULL;
+			$img_alt = $img->getAttribute('alt') ?: NULL;
+			$img_src = $img->getAttribute('src') ?: NULL;
 
 			if ($img_width === NULL OR $img_height === NULL)
 			{	
@@ -74,28 +84,37 @@ class ee2amp {
 
 				}
 			}
-			$new_img = '<div class="amp-image"><amp-img src="' . $img_src . '"';
-			if ($img_alt) $new_img .= ' alt="' . $img_alt . '"';
-			if ($img_width) $new_img .= ' width="' . $img_width . '"';
-			if ($img_height) $new_img .= ' height="' . $img_height . '"';	
-			if ($img_width < 480)
-			{
-				$new_img .= ' layout="fixed"></amp-img></div>';				
-			}
-			else
-			{
-				$new_img .= ' layout="responsive"></amp-img></div>';				
-			}
+			
 			$orig_img = $img->outerHtml();
+			
+			if ($img_width && $img_height)
+			{
+				$new_img = '<amp-img src="' . $img_src . '"';
+				if ($img_alt) $new_img .= ' alt="' . $img_alt . '"';
+				if ($img_width) $new_img .= ' width="' . $img_width . '"';
+				if ($img_height) $new_img .= ' height="' . $img_height . '"';	
+				if ($img_width < $min_width)
+				{
+					$new_img .= ' layout="fixed"></amp-img>';				
+				}
+				else
+				{
+					$new_img .= ' layout="responsive"></amp-img>';				
+				}
+				
+				$data = preg_replace('/ ?\/>/', '>', $data);
+				$data = $this->str_replace_first($data, $orig_img, $new_img);
 
-			$data = preg_replace('/ ?\/>/', '>', $data);
-			$data = $this->str_replace_first($data, $orig_img, $new_img);
+			}
+			
+			else { $data = $this->str_replace_first($data, $orig_img, ''); }
 
 		}
 
 		// Replace iframes
 
 		$iframes = $dom->find('iframe');
+
 		foreach ($iframes as $iframe)
 		{
 			// Vimeo
@@ -106,7 +125,7 @@ class ee2amp {
 				$video_src = substr($iframe->getAttribute('src'), strrpos($iframe->getAttribute('src'), '/') + 1);
 				$video_width = $iframe->getAttribute('width');
 				$video_height = $iframe->getAttribute('height');
-				$new_video = '<amp-vimeo data-videoid="' . $video_src . '" width="' . $video_width . '" height="' . $video_height . '" layout="responsive"></amp-vimeo>';
+				$new_video = "<amp-vimeo data-videoid='{video_src}' width='{$video_width}' height='{$video_height}' layout='responsive'></amp-vimeo>";
 				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_video);
 			}
 
@@ -122,7 +141,7 @@ class ee2amp {
 				}
 				$video_width = $iframe->getAttribute('width');
 				$video_height = $iframe->getAttribute('height');
-				$new_video = '<amp-youtube data-videoid="' . $video_src . '" width="' . $video_width . '" height="' . $video_height . '" layout="responsive"></amp-youtube>';
+				$new_video = "<amp-youtube data-videoid='{$video_src}' width='{$video_width}' height='{$video_height}'' layout='responsive'></amp-youtube>";
 				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_video);
 
 			}			
@@ -134,7 +153,7 @@ class ee2amp {
 				$sound_src = substr($iframe->getAttribute('src'), strpos($iframe->getAttribute('src'), '/tracks/') + 8);
 				$sound_src = substr($sound_src, 0, strpos($sound_src, 'a') -1);
 				$sound_height = $iframe->getAttribute('height');
-				$new_sound = '<amp-soundcloud data-trackid="' . $sound_src . '" height="' . $sound_height . '" layout="fixed-height" data-visual="true"></amp-soundcloud>';
+				$new_sound = "<amp-soundcloud data-trackid='{$sound_src}' height='{$sound_height}' layout='fixed-height' data-visual='true'></amp-soundcloud>";
 				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_sound);				
 			}
 
@@ -144,14 +163,15 @@ class ee2amp {
 
 		$data = preg_replace('/(<[^>]+) (style|shape)=".*?"/', '$1', $data);
 
-		// Remove scripts and objects
+		// Remove scripts, objects and iframes
 
-		$data = preg_replace('/<(script|object).*?>.*?<\/\1>/', '', $data);
+		$data = preg_replace('/<(script|object|iframe).*?>.*?<\/\1>/', '', $data);
 
-		$this->return_data = $data;
-		$this->return_data = ee()->functions->prep_conditionals($this->return_data, $cond);
-		return $this->return_data;
+		$data = ee()->functions->prep_conditionals($data, $cond);
+
+		return $data;
 	}	
+
 
 	function str_replace_first($string ,$search , $replace) 
 	{ 
