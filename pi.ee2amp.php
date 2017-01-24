@@ -130,7 +130,7 @@ class ee2amp {
 			// Soundcloud
 			if (strpos($iframe->getAttribute('src'), 'soundcloud.com') !== FALSE)
 			{
-				$cound['soundcloud'] = 'yes';
+				$cond['soundcloud'] = 'yes';
 				$sound_src = substr($iframe->getAttribute('src'), strpos($iframe->getAttribute('src'), '/tracks/') + 8);
 				$sound_src = substr($sound_src, 0, strpos($sound_src, 'a') -1);
 				$sound_height = $iframe->getAttribute('height');
