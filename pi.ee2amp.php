@@ -10,15 +10,6 @@
  * @link		https://willowlightstudio.com
  */
 
-$plugin_info = array(
-	'pi_name'		=> 'AMP Parser for ExpressionEngine',
-	'pi_version'	=> '1.0',
-	'pi_author'		=> 'Willow Light Studio',
-	'pi_author_url'	=> 'https://willowlightstudio.com',
-	'pi_description'=> 'Makes HTML tags AMP compatible',
-	'pi_usage'		=> ee2amp::usage()
-);
-
 require 'vendor/autoload.php';
 use PHPHtmlParser\Dom;
 
@@ -27,32 +18,32 @@ class ee2amp {
 
 
 	protected $return_data;
-    
+
 	public function __construct()
 	{
 	}
 
-	function parse() 
+	function parse()
 	{
-
-		$vars = array();
-
-		$data = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'content');
+		$content = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'content');
+		$extra = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'extra');
 
 		$min_width = ee()->TMPL->fetch_param('min_width') ?: 480;
 
-		$cond['vimeo'] = 'no';
-		$cond['soundcloud'] = 'no';
-		$cond['youtube'] = 'no';
+		$cond = [
+			'vimeo' => FALSE,
+			'soundcloud' => FALSE,
+			'youtube' => FALSE
+		];
 
 		$dom = new Dom;
 
-		$dom->load($data);
+		$dom->load($content);
 
 		// Replaces multiple whitespaces in image tags if present
 
-		$data = preg_replace_callback('/<img.*?\/?>/', function ($matches) { return preg_replace('!\s+!', ' ', $matches[0]) ; }, $data);
-		
+		$content = preg_replace_callback('/<img.*?\/?>/', function ($matches) { return preg_replace('!\s+!', ' ', $matches[0]) ; }, $content);
+
 		// Replace images
 
 		$images = $dom->find('img');
@@ -64,12 +55,12 @@ class ee2amp {
 			$img_src = $img->getAttribute('src') ?: NULL;
 
 			if ($img_width === NULL OR $img_height === NULL)
-			{	
+			{
 
 
 				$styles = $img->getAttribute('style');
 				$styles = rtrim($styles, ';');
-				$styles = explode(";", $styles);			
+				$styles = explode(";", $styles);
 				foreach ($styles as $style)
 				{
 					if (strpos($style, 'width') !== FALSE AND strpos($style,'-width') === FALSE)
@@ -84,30 +75,30 @@ class ee2amp {
 
 				}
 			}
-			
+
 			$orig_img = $img->outerHtml();
-			
+
 			if ($img_width && $img_height)
 			{
 				$new_img = '<amp-img src="' . $img_src . '"';
 				if ($img_alt) $new_img .= ' alt="' . $img_alt . '"';
 				if ($img_width) $new_img .= ' width="' . $img_width . '"';
-				if ($img_height) $new_img .= ' height="' . $img_height . '"';	
+				if ($img_height) $new_img .= ' height="' . $img_height . '"';
 				if ($img_width < $min_width)
 				{
-					$new_img .= ' layout="fixed"></amp-img>';				
+					$new_img .= ' layout="fixed"></amp-img>';
 				}
 				else
 				{
-					$new_img .= ' layout="responsive"></amp-img>';				
+					$new_img .= ' layout="responsive"></amp-img>';
 				}
-				
-				$data = preg_replace('/ ?\/>/', '>', $data);
-				$data = $this->str_replace_first($data, $orig_img, $new_img);
+
+				$content = preg_replace('/ ?\/>/', '>', $content);
+				$content = $this->str_replace_first($content, $orig_img, $new_img);
 
 			}
-			
-			else { $data = $this->str_replace_first($data, $orig_img, ''); }
+
+			else { $content = $this->str_replace_first($content, $orig_img, ''); }
 
 		}
 
@@ -121,19 +112,19 @@ class ee2amp {
 
 			if (strpos($iframe->getAttribute('src'), 'player.vimeo.com') !== FALSE)
 			{
-				$cond['vimeo'] = 'yes';
+				$cond['vimeo'] = TRUE;
 				$video_src = substr($iframe->getAttribute('src'), strrpos($iframe->getAttribute('src'), '/') + 1);
 				$video_width = $iframe->getAttribute('width');
 				$video_height = $iframe->getAttribute('height');
 				$new_video = "<amp-vimeo data-videoid='{video_src}' width='{$video_width}' height='{$video_height}' layout='responsive'></amp-vimeo>";
-				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_video);
+				$content = $this->str_replace_first($content, $iframe->outerHtml(), $new_video);
 			}
 
 			// YouTube
 
 			if (strpos($iframe->getAttribute('src'), 'youtube.com') !== FALSE)
 			{
-				$cond['youtube'] = 'yes';
+				$cond['youtube'] = TRUE;
 				$video_src = substr($iframe->getAttribute('src'), strrpos($iframe->getAttribute('src'), '/embed/') + 7);
 				if (strpos($video_src, '?') !== FALSE)
 				{
@@ -142,50 +133,42 @@ class ee2amp {
 				$video_width = $iframe->getAttribute('width');
 				$video_height = $iframe->getAttribute('height');
 				$new_video = "<amp-youtube data-videoid='{$video_src}' width='{$video_width}' height='{$video_height}'' layout='responsive'></amp-youtube>";
-				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_video);
+				$content = $this->str_replace_first($content, $iframe->outerHtml(), $new_video);
 
-			}			
-			
+			}
+
 			// Soundcloud
 			if (strpos($iframe->getAttribute('src'), 'soundcloud.com') !== FALSE)
 			{
-				$cond['soundcloud'] = 'yes';
+				$cond['soundcloud'] = TRUE;
 				$sound_src = substr($iframe->getAttribute('src'), strpos($iframe->getAttribute('src'), '/tracks/') + 8);
 				$sound_src = substr($sound_src, 0, strpos($sound_src, 'a') -1);
 				$sound_height = $iframe->getAttribute('height');
 				$new_sound = "<amp-soundcloud data-trackid='{$sound_src}' height='{$sound_height}' layout='fixed-height' data-visual='true'></amp-soundcloud>";
-				$data = $this->str_replace_first($data, $iframe->outerHtml(), $new_sound);				
+				$content = $this->str_replace_first($content, $iframe->outerHtml(), $new_sound);
 			}
 
 		}
-		
+
 		// Remove any inline styles
 
-		$data = preg_replace('/(<[^>]+) (style|shape)=".*?"/', '$1', $data);
+		$content = preg_replace('/(<[^>]+) (style|shape)=".*?"/', '$1', $content);
 
 		// Remove scripts, objects and iframes
 
-		$data = preg_replace('/<(script|object|iframe).*?>.*?<\/\1>/', '', $data);
+		$content = preg_replace('/<(script|object|iframe).*?>.*?<\/\1>/', '', $content);
 
-		$data = ee()->functions->prep_conditionals($data, $cond);
+		$extra = ee()->functions->prep_conditionals($extra, $cond);
+		
+		return $content."\n".$extra;
+	}
 
-		return $data;
-	}	
 
-
-	function str_replace_first($string ,$search , $replace) 
-	{ 
+	function str_replace_first($string ,$search , $replace)
+	{
 		if ((($string_len=strlen($string))==0) || (($search_len=strlen($search))==0)) return $string;
 		$pos=strpos($string,$search);
 		if ($pos>0) return substr($string,0,$pos).$replace.substr($string,$pos+$search_len,max(0,$string_len-($pos+$search_len)));
 		return $string;
-	}
-
-	public static function usage()
-	{
-		ob_start();
-		$buffer = ob_get_contents();
-		ob_end_clean();
-		return $buffer;
 	}
 }
