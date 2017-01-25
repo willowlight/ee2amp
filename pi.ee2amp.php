@@ -28,7 +28,11 @@ class ee2amp {
 		$content = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'content');
 		$extra = ee()->TMPL->fetch_data_between_var_pairs(ee()->TMPL->tagdata, 'extra');
 
-		$min_width = ee()->TMPL->fetch_param('min_width') ?: 480;
+		$min_width = ee()->TMPL->fetch_param('min_width') ?: '480';
+		ee()->load->library('logger');
+
+		ee()->logger->developer($min_width);
+
 
 		$cond = [
 			'vimeo' => FALSE,
@@ -84,13 +88,13 @@ class ee2amp {
 				if ($img_alt) $new_img .= ' alt="' . $img_alt . '"';
 				if ($img_width) $new_img .= ' width="' . $img_width . '"';
 				if ($img_height) $new_img .= ' height="' . $img_height . '"';
-				if ($img_width < $min_width)
+				if ($img_width > intVal($min_width))
 				{
-					$new_img .= ' layout="fixed"></amp-img>';
+					$new_img .= ' layout="responsive" class="amp-img-responsive"></amp-img>';
 				}
 				else
 				{
-					$new_img .= ' layout="responsive"></amp-img>';
+					$new_img .= ' layout="fixed" class="amp-img-fixed"></amp-img>';
 				}
 
 				$content = preg_replace('/ ?\/>/', '>', $content);
@@ -159,7 +163,7 @@ class ee2amp {
 		$content = preg_replace('/<(script|object|iframe).*?>.*?<\/\1>/', '', $content);
 
 		$extra = ee()->functions->prep_conditionals($extra, $cond);
-		
+
 		return $content."\n".$extra;
 	}
 
